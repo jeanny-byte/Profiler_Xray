@@ -15,6 +15,14 @@ user_agents = [
     # Add more User-Agent strings here
 ]
 
+# Define the search engines
+search_engines = {
+    "DuckDuckGo": "https://duckduckgo.com/html/?q=",
+    "Google": "https://www.google.com/search?q=",
+    "Bing": "https://www.bing.com/search?q=",
+    "RecruitmentGeek": "https://www.recruitmentgeek.com/search?q=",
+}
+
 # Configure logging to both file and terminal
 logging.basicConfig(filename="linkedin_data_extraction.log", level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
 console_handler = logging.StreamHandler()
@@ -23,10 +31,12 @@ console_formatter = logging.Formatter("%(asctime)s - %(levelname)s: %(message)s"
 console_handler.setFormatter(console_formatter)
 logging.getLogger().addHandler(console_handler)
 
-# Define the GUI layout
+# Define the GUI layout with radio buttons for search engines
 layout = [
     [sg.Text("Select a CSV or Excel file:")],
     [sg.Input(key="input_file"), sg.FileBrowse(file_types=(("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")))],
+    [sg.Text("Select a Search Engine:")],
+    [sg.Radio("DuckDuckGo", "search_engine", default=True), sg.Radio("Google", "search_engine"), sg.Radio("Bing", "search_engine"), sg.Radio("RecruitmentGeek", "search_engine")],
     [sg.Button("Extract Data")],
 ]
 
@@ -41,6 +51,7 @@ while True:
 
     if event == "Extract Data":
         input_file = values["input_file"]
+        selected_search_engine = [key for key, value in values.items() if "DuckDuckGo" in key or "Google" in key or "Bing" in key or "RecruitmentGeek" in key][0]
 
         if input_file.endswith(".csv"):
             df = pd.read_csv(input_file)
@@ -57,7 +68,9 @@ while True:
             headers = {'User-Agent': user_agent}
 
             search_query = f'"{contact_name}" site:linkedin.com/in AND "{company_name}" "United Kingdom" -"Customer Support"'
-            response = requests.get(f"https://duckduckgo.com/html/?q={search_query}", headers=headers)
+            search_url = search_engines[selected_search_engine] + search_query
+
+            response = requests.get(search_url, headers=headers)
 
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
