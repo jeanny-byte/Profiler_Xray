@@ -33,7 +33,7 @@ def search_linkedin_profiles(contact_name, company, selected_search_engine):
         print("Invalid search engine selected.")
         return []
 
-    search_url = search_engines[selected_search_engine] + f'"{contact_name}" United Kingdom LinkedIn profile'
+    search_url = search_engines[selected_search_engine] + f'"{contact_name}" LinkedIn profile'
     headers = {
         'User-Agent': get_random_user_agent()
     }
