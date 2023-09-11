@@ -1,67 +1,109 @@
-import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.by import By
 import time
 
-# Load the CSV file
-csv_file = 'your_file.csv'  # Replace with the path to your CSV file
-df = pd.read_csv(csv_file)
+import PySimpleGUI as sg
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import random
+import openpyxl
+from openpyxl import workbook
+import re
 
-# Set up web drivers for different browsers
-driver = webdriver.Chrome()  # Change this to your preferred browser
+# Define a list of user agents to rotate through
+user_agents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/85.0',
+    # Add more user agents as needed
+]
 
-# Define search engines
-search_engines = {
-    'Brave Search': 'https://search.brave.com/search?q=',
-    'DuckDuckGo': 'https://duckduckgo.com/?q=',
-    'Google': 'https://www.google.com/search?q='
-}
+# Define a function to select a random user agent
+def get_random_user_agent():
+    return random.choice(user_agents)
 
-# Define the columns
-company_column = 'Company Name'
-telephone_column = 'Telephone'
-sic_code_column = 'SIC Code'
-contact_name_column = 'Contact Name'
+# Define a function to search Google and extract LinkedIn profiles
+def search_linkedin_profiles(contact_name, company):
+    query = f'"{contact_name}" United Kingdom LinkedIn profile'
+    search_url = f'https://search.brave.com/search?q={query}'
+    headers = {
+        'User-Agent': get_random_user_agent()
+    }
 
-# Function to perform a search and grab the first three profile links
-def search_and_get_profiles(search_engine, query):
-    driver.get(search_engine + query)
-    time.sleep(2)  # Wait for the search results to load
+    try:
+        time.sleep(random.randint(5, 10))
+        response = requests.get(search_url, headers=headers)
+        time.sleep(3)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        results = []
 
-    profile_links = []
-
-    if search_engine == 'Google':
-        results = driver.find_elements(By.CSS_SELECTOR, 'div.g')
-        for result in results[:3]:
-            link = result.find_element(By.CSS_SELECTOR, 'a').get_attribute('href')
-            profile_links.append(link)
-    else:
-        links = driver.find_elements(By.CSS_SELECTOR, 'a')
-        for link in links[:3]:
-            href = link.get_attribute('href')
+        for link in soup.find_all('a'):
+            href = link.get('href')
             if href and 'linkedin.com/in/' in href:
-                profile_links.append(href)
+                text = link.text
+                print (text)
+                if re.search(f'{contact_name}|{company}', text, re.I):
+                    results.append({"Contact Name": contact_name, "Company": company, "LinkedIn Profile": href})
 
-    return profile_links
+        return results
 
-# Iterate through each row in the CSV and perform searches
-for index, row in df.iterrows():
-    company_name = row[company_column]
-    telephone = row[telephone_column]
-    sic_code = row[sic_code_column]
-    contact_name = row[contact_name_column]
+    except requests.exceptions.RequestException as e:
+        print(f"Error: {e}")
+        return []
 
-    for engine, base_url in search_engines.items():
-        query = f'"{company_name}" "{telephone}" "{sic_code}" "{contact_name}" site:linkedin.com'
-        profile_links = search_and_get_profiles(base_url, query)
+# Define the PySimpleGUI layout
+layout = [
+    [sg.Text("Select a .csv or .xlsx file:")],
+    [sg.InputText(key="file_path"), sg.FileBrowse(file_types=(("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")))],
+    [sg.Button("Start Search"), sg.Button("Exit")],
+]
 
-        # Append the profile links to the CSV
-        profile_links_str = ', '.join(profile_links)
-        df.at[index, f'{engine} Profiles'] = profile_links_str
+window = sg.Window("LinkedIn Search", layout, icon="linkedin-3-256.ico")
 
-# Save the updated CSV
-df.to_csv('updated_file.csv', index=False)  # Replace with your desired output filename
+while True:
+    event, values = window.read()
 
-# Close the web driver
-driver.quit()
+    if event == sg.WIN_CLOSED or event == "Exit":
+        break
+
+    if event == "Start Search":
+        file_path = values["file_path"]
+        if file_path.endswith(".csv"):
+            df = pd.read_csv(file_path)
+        elif file_path.endswith(".xlsx"):
+            df = pd.read_excel(file_path)
+        else:
+            sg.popup_error("Invalid file format. Please select a .csv or .xlsx file.")
+            continue
+
+        if "Contact Name" not in df.columns or "Company" not in df.columns:
+            sg.popup_error("The file must contain columns named 'Contact Name' and 'Company'.")
+            continue
+
+        results = []
+
+        for _, row in df.iterrows():
+            contact_name = row["Contact Name"]
+            company = row["Company"].replace("+", " ")
+            search_results = search_linkedin_profiles(contact_name, company)
+            results.extend(search_results)
+
+        if not results:
+            sg.popup("No matching results found.")
+        else:
+            # Specify the path to your output file here
+            output_file_path = "output_results.xlsx"
+
+            # Load the existing file (CSV or XLSX)
+            existing_df = pd.read_excel(output_file_path) if output_file_path.endswith(".xlsx") else pd.read_csv(
+                output_file_path)
+
+            # Concatenate the new results with the existing data
+            updated_df = pd.concat([existing_df, pd.DataFrame(results)], ignore_index=True)
+
+            # Save the updated data back to the file
+            updated_df.to_excel(output_file_path, index=False) if output_file_path.endswith(
+                ".xlsx") else updated_df.to_csv(output_file_path, index=False)
+
+            print("Results appended to", output_file_path)
+window.close()

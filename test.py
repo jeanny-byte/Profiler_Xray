@@ -1,118 +1,124 @@
+import time
 import PySimpleGUI as sg
 import pandas as pd
-from openpyxl import load_workbook
-import datetime
 import requests
 from bs4 import BeautifulSoup
-import logging
 import random
+import openpyxl
+import re
 
-# Define a list of User-Agent strings
+# Define a list of user agents to rotate through
 user_agents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
-    # Add more User-Agent strings here
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/85.0',
+    # Add more user agents as needed
 ]
 
-# Define the search engines
+# Define search engines and their URLs
 search_engines = {
-    "DuckDuckGo": "https://duckduckgo.com/html/?q=",
-    "Google": "https://www.google.com/search?q=",
-    "Bing": "https://www.bing.com/search?q=",
-    "RecruitmentGeek": "https://www.recruitmentgeek.com/search?q=",
+    "search.brave.com": "https://search.brave.com/search?q=",
+    "www.bing.com": "https://www.bing.com/search?q=",
+    "www.duckduckgo.com": "https://www.duckduckgo.com/?q=",
+    "www.google.com": "https://www.google.com/search?q=",
 }
 
-# Configure logging to both file and terminal
-logging.basicConfig(filename="linkedin_data_extraction.log", level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter("%(asctime)s - %(levelname)s: %(message)s")
-console_handler.setFormatter(console_formatter)
-logging.getLogger().addHandler(console_handler)
+# Define a function to select a random user agent
+def get_random_user_agent():
+    return random.choice(user_agents)
 
-# Define the GUI layout with radio buttons for search engines
+# Define a function to search the selected search engine and extract LinkedIn profiles
+def search_linkedin_profiles(contact_name, company, selected_search_engine):
+    if selected_search_engine not in search_engines:
+        print("Invalid search engine selected.")
+        return []
+
+    search_url = search_engines[selected_search_engine] + f'"{contact_name}" United Kingdom LinkedIn profile'
+    headers = {
+        'User-Agent': get_random_user_agent()
+    }
+
+    try:
+        time.sleep(random.randint(5, 10))
+        response = requests.get(search_url, headers=headers)
+        time.sleep(3)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        results = []
+
+        for link in soup.find_all('a'):
+            href = link.get('href')
+            if href and 'linkedin.com/in/' in href:
+                text = link.text
+                print(text)
+                if re.search(f'{contact_name}|{company}', text, re.I):
+                    results.append({"Contact Name": contact_name, "Company": company, "LinkedIn Profile": href})
+
+        return results
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error: {e}")
+        return []
+
+# Define the PySimpleGUI layout
 layout = [
-    [sg.Text("Select a CSV or Excel file:")],
-    [sg.Input(key="input_file"), sg.FileBrowse(file_types=(("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")))],
-    [sg.Text("Select a Search Engine:")],
-    [sg.Radio("DuckDuckGo", "search_engine", default=True), sg.Radio("Google", "search_engine"), sg.Radio("Bing", "search_engine"), sg.Radio("RecruitmentGeek", "search_engine")],
-    [sg.Button("Extract Data")],
+    [sg.Text("Select a .csv or .xlsx file:")],
+    [sg.InputText(key="file_path"), sg.FileBrowse(file_types=(("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")))],
+    [sg.Text("Select a search engine:")],
+    [sg.Radio("search.brave.com", "search_engine", default=True, key="search.brave.com"),
+     sg.Radio("www.bing.com", "search_engine", key="www.bing.com"),
+     sg.Radio("www.duckduckgo.com", "search_engine", key="www.duckduckgo.com"),
+     sg.Radio("www.google.com", "search_engine", key="www.google.com")],
+    [sg.Button("Start Search"), sg.Button("Exit")],
 ]
 
-# Create the GUI window
-window = sg.Window("LinkedIn Data Extractor", layout)
+window = sg.Window("LinkedIn Search", layout, icon="linkedin-3-256.ico")
 
 while True:
     event, values = window.read()
 
-    if event == sg.WINDOW_CLOSED:
+    if event == sg.WIN_CLOSED or event == "Exit":
         break
 
-    if event == "Extract Data":
-        input_file = values["input_file"]
-        selected_search_engine = [key for key, value in values.items() if "DuckDuckGo" in key or "Google" in key or "Bing" in key or "RecruitmentGeek" in key][0]
+    if event == "Start Search":
+        file_path = values["file_path"]
+        if file_path.endswith(".csv"):
+            df = pd.read_csv(file_path)
+        elif file_path.endswith(".xlsx"):
+            df = pd.read_excel(file_path)
+        else:
+            sg.popup_error("Invalid file format. Please select a .csv or .xlsx file.")
+            continue
 
-        if input_file.endswith(".csv"):
-            df = pd.read_csv(input_file)
-        elif input_file.endswith(".xlsx"):
-            df = pd.read_excel(input_file)
+        if "Contact Name" not in df.columns or "Company" not in df.columns:
+            sg.popup_error("The file must contain columns named 'Contact Name' and 'Company'.")
+            continue
 
-        for index, row in df.iterrows():
-            company_name = row["Company Name"]
-            contact_name = row["Contact"]
-            telephone = row["Telephone"]
+        selected_search_engine = next(key for key, value in values.items() if value and key in search_engines)
+        results = []
 
-            # Select a random User-Agent from the list
-            user_agent = random.choice(user_agents)
-            headers = {'User-Agent': user_agent}
+        for _, row in df.iterrows():
+            contact_name = row["Contact Name"]
+            company = row["Company"].replace("+", " ")
+            search_results = search_linkedin_profiles(contact_name, company, selected_search_engine)
+            results.extend(search_results)
 
-            search_query = f'"{contact_name}" site:linkedin.com/in AND "{company_name}" "United Kingdom" -"Customer Support"'
-            search_url = search_engines[selected_search_engine] + search_query
+        if not results:
+            sg.popup("No matching results found.")
+        else:
+            # Specify the path to your output file here
+            output_file_path = "output_results.xlsx"
 
-            response = requests.get(search_url, headers=headers)
+            # Load the existing file (CSV or XLSX)
+            existing_df = pd.read_excel(output_file_path) if output_file_path.endswith(".xlsx") else pd.read_csv(
+                output_file_path)
 
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                search_results = soup.find_all('div', class_='result')
+            # Concatenate the new results with the existing data
+            updated_df = pd.concat([existing_df, pd.DataFrame(results)], ignore_index=True)
 
-                extracted_results = []
-                for result in search_results[:3]:  # Only extract the first three results
-                    title = result.find('a', class_='result__a').text
-                    url = result.find('a', class_='result__url')['href']
-                    extracted_results.append(f"{title} - {url}")
+            # Save the updated data back to the file
+            updated_df.to_excel(output_file_path, index=False) if output_file_path.endswith(
+                ".xlsx") else updated_df.to_csv(output_file_path, index=False)
 
-                # Append the extracted results to the current row
-                df.at[index, "LinkedIn Results"] = ', '.join(extracted_results)
-
-                logging.info(f"Data extracted for row {index}: {company_name}, {contact_name}, {telephone}")
-
-        # Save the updated DataFrame to a new file
-        current_datetime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        new_file_name = f"output_{current_datetime}.xlsx"
-        df.to_excel(new_file_name, index=False, engine='openpyxl')
-
-        logging.info(f"Data saved to {new_file_name}")
-
-        # Ask the user where to save the new file
-        save_location = sg.popup_get_file("Save the new file as:", save_as=True, file_types=(("Excel Files", "*.xlsx"),))
-
-        if save_location:
-            # Copy styles from the input file to the new file (if it's an Excel file)
-            if input_file.endswith(".xlsx"):
-                input_wb = load_workbook(input_file)
-                output_wb = load_workbook(new_file_name)
-                for sheet_name in input_wb.sheetnames:
-                    input_sheet = input_wb[sheet_name]
-                    output_sheet = output_wb[sheet_name]
-                    for row in input_sheet.iter_rows(min_row=2, min_col=1, max_col=len(df.columns) + 1):
-                        for cell in row:
-                            output_cell = output_sheet.cell(row=cell.row, column=cell.column, value=cell.value)
-                            output_cell._style = cell._style
-                output_wb.save(new_file_name)
-
-                logging.info("Styles copied from input file to the new file.")
-
-            sg.popup(f"Data extracted and saved to:\n{new_file_name}")
-
+            print("Results appended to", output_file_path)
 window.close()
