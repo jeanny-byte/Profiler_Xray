@@ -8,7 +8,7 @@ import openpyxl
 import re
 
 # Replace 'YOUR_API_KEY' with your Proxifly API key
-proxifly_api_key = 'YOUR_API_KEY'
+proxifly_api_key = '4xXKD6teyEz7RGfwwwRyTcmrsptbSpRXNYkNvbLb5rkC'
 
 # Proxifly API endpoint for proxy rotation
 proxifly_rotate_url = 'https://api.proxifly.com/v1/rotate'
