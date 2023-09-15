@@ -7,6 +7,12 @@ import random
 import openpyxl
 import re
 
+# Replace 'YOUR_API_KEY' with your Proxifly API key
+proxifly_api_key = 'YOUR_API_KEY'
+
+# Proxifly API endpoint for proxy rotation
+proxifly_rotate_url = 'https://api.proxifly.com/v1/rotate'
+
 # Define a list of user agents to rotate through
 user_agents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
@@ -27,6 +33,19 @@ search_engines = {
 def get_random_user_agent():
     return random.choice(user_agents)
 
+# Define a function to rotate Proxifly proxies
+def rotate_proxifly_proxy():
+    try:
+        headers = {
+            'Authorization': f'Bearer {proxifly_api_key}'
+        }
+        response = requests.post(proxifly_rotate_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error rotating Proxifly proxy: {e}")
+        return None
+
 # Define a function to search the selected search engine and extract LinkedIn profiles
 def search_linkedin_profiles(contact_name, company, selected_search_engine):
     if selected_search_engine not in search_engines:
@@ -39,8 +58,17 @@ def search_linkedin_profiles(contact_name, company, selected_search_engine):
     }
 
     try:
+        proxy_info = rotate_proxifly_proxy()
+        if not proxy_info:
+            return []
+
+        proxies = {
+            'http': f'http://{proxy_info["proxy"]}',
+            'https': f'http://{proxy_info["proxy"]}',
+        }
+
         time.sleep(random.randint(5, 10))
-        response = requests.get(search_url, headers=headers)
+        response = requests.get(search_url, headers=headers, proxies=proxies)
         time.sleep(3)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -110,15 +138,20 @@ while True:
             output_file_path = "output_results.xlsx"
 
             # Load the existing file (CSV or XLSX)
-            existing_df = pd.read_excel(output_file_path) if output_file_path.endswith(".xlsx") else pd.read_csv(
-                output_file_path)
+            if output_file_path.endswith(".xlsx"):
+                existing_df = pd.read_excel(output_file_path, engine="openpyxl")
+            else:
+                existing_df = pd.read_csv(output_file_path)
 
             # Concatenate the new results with the existing data
             updated_df = pd.concat([existing_df, pd.DataFrame(results)], ignore_index=True)
 
             # Save the updated data back to the file
-            updated_df.to_excel(output_file_path, index=False) if output_file_path.endswith(
-                ".xlsx") else updated_df.to_csv(output_file_path, index=False)
+            if output_file_path.endswith(".xlsx"):
+                updated_df.to_excel(output_file_path, index=False, engine="openpyxl")
+            else:
+                updated_df.to_csv(output_file_path, index=False)
 
             print("Results appended to", output_file_path)
+
 window.close()
