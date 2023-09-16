@@ -6,12 +6,12 @@ from bs4 import BeautifulSoup
 import random
 import openpyxl
 import re
-
-# Replace 'YOUR_API_KEY' with your Proxifly API key
-proxifly_api_key = '4xXKD6teyEz7RGfwwwRyTcmrsptbSpRXNYkNvbLb5rkC'
-
-# Proxifly API endpoint for proxy rotation
-proxifly_rotate_url = 'https://api.proxifly.com/v1/rotate'
+#
+# # Replace 'YOUR_API_KEY' with your Proxifly API key
+# proxifly_api_key = '4xXKD6teyEz7RGfwwwRyTcmrsptbSpRXNYkNvbLb5rkC'
+#
+# # Proxifly API endpoint for proxy rotation
+# proxifly_rotate_url = 'https://api.proxifly.com/v1/rotate'
 
 # Define a list of user agents to rotate through
 user_agents = [
@@ -37,9 +37,9 @@ def get_random_user_agent():
 def rotate_proxifly_proxy():
     try:
         headers = {
-            'Authorization': f'Bearer {proxifly_api_key}'
+            'user_agents'
         }
-        response = requests.post(proxifly_rotate_url, headers=headers)
+        response = requests.post(search_engines, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
